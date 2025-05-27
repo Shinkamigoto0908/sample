@@ -1,100 +1,121 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>フォント変更＆画像保存</title>
-    <script type="text/javascript" src="//typesquare.com/3/tsst/script/ja/typesquare.js?67d2ae4f23d040ecb7ea788aac1e02e5&fadein=10" charset="utf-8"></script>
-    <style>
-        body {
-            font-family: "UD デジタル教科書体", sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        input, select, button {
-            font-family: "UD デジタル教科書体", sans-serif;
-            margin: 10px;
-            font-size: 16px;
-        }
-        #loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            font-size: 24px;
-            font-weight: bold;
-            font-family: "UD デジタル教科書体", sans-serif;
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>録音付きストップウォッチ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    #timer {
+      font-size: 2em;
+      margin: 20px 0;
+    }
+    button {
+      font-size: 1.2em;
+      padding: 0.5em 1em;
+      margin: 0.5em;
+    }
+  </style>
 </head>
 <body>
 
-    <div id="loading">
-        <div class="spinner"></div>
-        <p>フォントをロード中...</p>
-    </div>
+  <h1>録音付きストップウォッチ</h1>
+  <div id="timer">00:00.0</div>
 
-    <h2>フォント変更＆画像保存ツール</h2>
-    <input type="text" id="textInput" placeholder="ここに入力">
-    
-    <label for="fontSize">文字サイズ:</label>
-    <input type="number" id="fontSize" value="40" min="10" max="100">
+  <button id="startBtn">🎙️ スタート</button>
+  <button id="stopBtn" disabled>🛑 ストップ</button>
+  <button id="resetBtn" disabled>🔁 リセット</button>
+  <button id="playBtn" disabled>▶️ 再生</button>
 
-    <label for="fontColor">文字色:</label>
-    <input type="color" id="fontColor" value="#000000">
+  <br><br>
+  <audio id="audioPlayer" controls></audio>
 
-    <button onclick="saveAsImage()">保存</button>
-    <canvas id="textCanvas" style="display: none;"></canvas>
+  <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+    let timer = null;
+    let count = 0;
 
-    <script>
-        document.fonts.ready.then(() => {
-            console.log("Webフォントがロードされました");
-            document.getElementById("loading").style.display = "none"; // ローディング画面を消す
-        });
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const playBtn = document.getElementById('playBtn');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const timerDisplay = document.getElementById('timer');
 
-        function saveAsImage() {
-            const text = document.getElementById("textInput").value || "サンプルテキスト";
-            const fontSize = document.getElementById("fontSize").value;
-            const fontColor = document.getElementById("fontColor").value;
-            const canvas = document.getElementById("textCanvas");
-            const ctx = canvas.getContext("2d");
+    // タイマー表示を mm:ss.d に変換
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      const dec = Math.floor((seconds - Math.floor(seconds)) * 10);
+      return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${dec}`;
+    }
 
-            canvas.width = 500;
-            canvas.height = 200;
+    // スタート
+    startBtn.onclick = async () => {
+      count = 0;
+      timerDisplay.textContent = formatTime(0);
+      timer = setInterval(() => {
+        count += 0.1;
+        timerDisplay.textContent = formatTime(count);
+      }, 100);
 
-            // 背景透過
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+      recordedChunks = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
 
-            // フォント適用（UD デジタル教科書体）
-            ctx.font = `${fontSize}px "UD デジタル教科書体"`;
-            ctx.fillStyle = fontColor;
-            ctx.fillText(text, 50, 100);
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
 
-            // 画像形式で保存
-            const image = canvas.toDataURL("image/png");
-            const link = document.createElement("a");
-            link.href = image;
-            link.download = "text_image.png";
-            link.click();
-        }
-    </script>
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        audioPlayer.src = url;
+        playBtn.disabled = false;
+      };
 
+      mediaRecorder.start();
+
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      resetBtn.disabled = true;
+      playBtn.disabled = true;
+    };
+
+    // ストップ
+    stopBtn.onclick = () => {
+      clearInterval(timer);
+      mediaRecorder.stop();
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      resetBtn.disabled = false;
+    };
+
+    // リセット
+    resetBtn.onclick = () => {
+      clearInterval(timer);
+      count = 0;
+      timerDisplay.textContent = formatTime(0);
+
+      recordedChunks = [];
+      audioPlayer.removeAttribute("src");
+      audioPlayer.load();
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      resetBtn.disabled = true;
+      playBtn.disabled = true;
+    };
+
+    // 再生
+    playBtn.onclick = () => {
+      audioPlayer.play();
+    };
+  </script>
 </body>
 </html>
